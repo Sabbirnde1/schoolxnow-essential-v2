@@ -1,0 +1,876 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Calendar, Clock, Users, MapPin, Plus, Edit2, Trash2, AlertCircle } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+interface TimetableEntry {
+  id: string;
+  day_of_week: string;
+  time_slot: string;
+  class_id: string;
+  subject_id: string;
+  teacher_id: string;
+  room_number?: string;
+  created_at: string;
+  // Joined data
+  class_name?: string;
+  subject_name?: string;
+  teacher_name?: string;
+}
+
+interface Teacher {
+  id: string;
+  full_name: string;
+  subject_specialization?: string;
+}
+
+interface Class {
+  id: string;
+  name: string;
+  section: string;
+  class_level: string;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  class_level: string;
+}
+
+const daysOfWeek = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+];
+
+const timeSlots = [
+  '08:00-08:45', '08:45-09:30', '09:30-10:15', '10:15-11:00',
+  '11:30-12:15', '12:15-13:00', '13:00-13:45', '13:45-14:30'
+];
+
+export function TimetableManagement() {
+  const { profile } = useAuth();
+  const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedView, setSelectedView] = useState<'weekly' | 'teacher' | 'class'>('weekly');
+  const [selectedFilter, setSelectedFilter] = useState<string>('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<TimetableEntry | null>(null);
+  const [conflicts, setConflicts] = useState<string[]>([]);
+
+  const [formData, setFormData] = useState({
+    day_of_week: '',
+    time_slot: '',
+    class_id: '',
+    subject_id: '',
+    teacher_id: '',
+    room_number: ''
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, [profile?.school_id]);
+
+  const fetchData = async () => {
+    if (!profile?.school_id) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch timetable entries without joins (using raw query since types aren't generated yet)
+      const { data: timetableData, error: timetableError } = await supabase
+        .from('timetable' as any)
+        .select('*')
+        .eq('school_id', profile.school_id)
+        .order('day_of_week')
+        .order('time_slot');
+
+      if (timetableError) throw timetableError;
+
+      // Fetch classes, subjects, and teachers for mapping
+      const [classesResponse, subjectsResponse, teachersResponse] = await Promise.all([
+        supabase.from('classes').select('id, name, section').eq('school_id', profile.school_id),
+        supabase.from('subjects').select('id, name, code').eq('school_id', profile.school_id),
+        supabase.from('teachers').select('id, full_name').eq('school_id', profile.school_id)
+      ]);
+
+      const classesMap = new Map(classesResponse.data?.map(c => [c.id, c]) || []);
+      const subjectsMap = new Map(subjectsResponse.data?.map(s => [s.id, s]) || []);
+      const teachersMap = new Map(teachersResponse.data?.map(t => [t.id, t]) || []);
+
+      // Format the data with manual joins
+      const formattedTimetable = timetableData?.map((entry: any) => {
+        const classData = classesMap.get(entry.class_id);
+        const subjectData = subjectsMap.get(entry.subject_id);
+        const teacherData = teachersMap.get(entry.teacher_id);
+        
+        return {
+          id: entry.id,
+          day_of_week: entry.day_of_week,
+          time_slot: entry.time_slot,
+          class_id: entry.class_id,
+          subject_id: entry.subject_id,
+          teacher_id: entry.teacher_id,
+          room_number: entry.room_number,
+          created_at: entry.created_at,
+          class_name: classData ? `${classData.name} - ${classData.section}` : 'Unknown Class',
+          subject_name: subjectData?.name || 'Unknown Subject',
+          teacher_name: teacherData?.full_name || 'Unknown Teacher'
+        };
+      }) || [];
+
+      setTimetableEntries(formattedTimetable);
+
+      // Fetch teachers
+      const { data: teachersData, error: teachersError } = await supabase
+        .from('teachers')
+        .select('id, full_name, subject_specialization')
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true);
+
+      if (teachersError) throw teachersError;
+      setTeachers(teachersData || []);
+
+      // Fetch classes
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('id, name, section, class_level')
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true);
+
+      if (classesError) throw classesError;
+      setClasses(classesData || []);
+
+      // Fetch subjects
+      const { data: subjectsData, error: subjectsError } = await supabase
+        .from('subjects')
+        .select('id, name, code, class_level')
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true);
+
+      if (subjectsError) throw subjectsError;
+      setSubjects(subjectsData || []);
+
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load timetable data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkConflicts = (data: typeof formData) => {
+    const conflicts: string[] = [];
+    
+    // Check teacher conflict
+    const teacherConflict = timetableEntries.find(entry => 
+      entry.teacher_id === data.teacher_id &&
+      entry.day_of_week === data.day_of_week &&
+      entry.time_slot === data.time_slot &&
+      (!editingEntry || entry.id !== editingEntry.id)
+    );
+    
+    if (teacherConflict) {
+      conflicts.push(`Teacher is already scheduled for ${teacherConflict.class_name} during this time`);
+    }
+    
+    // Check class conflict
+    const classConflict = timetableEntries.find(entry => 
+      entry.class_id === data.class_id &&
+      entry.day_of_week === data.day_of_week &&
+      entry.time_slot === data.time_slot &&
+      (!editingEntry || entry.id !== editingEntry.id)
+    );
+    
+    if (classConflict) {
+      conflicts.push(`Class already has a scheduled period during this time`);
+    }
+    
+    // Check room conflict
+    if (data.room_number) {
+      const roomConflict = timetableEntries.find(entry => 
+        entry.room_number === data.room_number &&
+        entry.day_of_week === data.day_of_week &&
+        entry.time_slot === data.time_slot &&
+        (!editingEntry || entry.id !== editingEntry.id)
+      );
+      
+      if (roomConflict) {
+        conflicts.push(`Room ${data.room_number} is already booked during this time`);
+      }
+    }
+    
+    setConflicts(conflicts);
+    return conflicts.length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!checkConflicts(formData)) {
+      toast.error('Schedule conflicts detected. Please resolve them before saving.');
+      return;
+    }
+
+    try {
+      const dataToSave = {
+        ...formData,
+        school_id: profile?.school_id,
+        room_number: formData.room_number || null
+      };
+
+      if (editingEntry) {
+        const { error } = await supabase
+          .from('timetable' as any)
+          .update(dataToSave as any)
+          .eq('id', editingEntry.id);
+
+        if (error) throw error;
+        toast.success('Timetable entry updated successfully');
+      } else {
+        const { error } = await supabase
+          .from('timetable' as any)
+          .insert([dataToSave as any]);
+
+        if (error) throw error;
+        toast.success('Timetable entry created successfully');
+      }
+
+      setIsDialogOpen(false);
+      setEditingEntry(null);
+      setFormData({
+        day_of_week: '',
+        time_slot: '',
+        class_id: '',
+        subject_id: '',
+        teacher_id: '',
+        room_number: ''
+      });
+      setConflicts([]);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving timetable entry:', error);
+      toast.error('Failed to save timetable entry');
+    }
+  };
+
+  const handleEdit = (entry: TimetableEntry) => {
+    setEditingEntry(entry);
+    setFormData({
+      day_of_week: entry.day_of_week,
+      time_slot: entry.time_slot,
+      class_id: entry.class_id,
+      subject_id: entry.subject_id,
+      teacher_id: entry.teacher_id,
+      room_number: entry.room_number || ''
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('timetable' as any)
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Timetable entry deleted successfully');
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      toast.error('Failed to delete timetable entry');
+    }
+  };
+
+  const getFilteredEntries = () => {
+    if (!selectedFilter) return timetableEntries;
+    
+    switch (selectedView) {
+      case 'teacher':
+        return timetableEntries.filter(entry => entry.teacher_id === selectedFilter);
+      case 'class':
+        return timetableEntries.filter(entry => entry.class_id === selectedFilter);
+      default:
+        return timetableEntries;
+    }
+  };
+
+  const renderWeeklyView = () => {
+    const filteredEntries = getFilteredEntries();
+    
+    return (
+      <div className="w-full">
+        {/* Mobile-first: Show simplified cards view on very small screens */}
+        <div className="block sm:hidden space-y-2">
+          {timeSlots.map(timeSlot => (
+            <div key={timeSlot} className="space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground bg-muted/30 px-2 py-1 rounded sticky top-0 z-10">
+                {timeSlot}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {daysOfWeek.slice(0, 6).map(day => {
+                  const entry = filteredEntries.find(
+                    e => e.day_of_week === day && e.time_slot === timeSlot
+                  );
+                  
+                  return (
+                    <div key={`${day}-${timeSlot}`} className="space-y-1">
+                      <div className="text-[10px] font-medium text-center text-muted-foreground">
+                        {day.slice(0, 3)}
+                      </div>
+                      {entry ? (
+                        <Card className="shadow-soft bg-card/80 backdrop-blur-sm border-l-4 border-l-primary">
+                          <CardContent className="p-2">
+                            <div className="space-y-1">
+                              <div className="font-medium text-xs truncate text-foreground">{entry.subject_name}</div>
+                              <div className="text-[9px] text-muted-foreground truncate">{entry.class_name?.split(' - ')[0]}</div>
+                              <div className="flex gap-1 justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0 touch-target-sm"
+                                  onClick={() => handleEdit(entry)}
+                                >
+                                  <Edit2 className="h-2.5 w-2.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0 touch-target-sm"
+                                  onClick={() => handleDelete(entry.id)}
+                                >
+                                  <Trash2 className="h-2.5 w-2.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div className="h-12 border border-dashed border-muted/30 rounded bg-muted/5"></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tablet and desktop: Enhanced table view */}
+        <div className="hidden sm:block">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+            <Table className="min-w-[600px] lg:min-w-[800px]">
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="w-16 lg:w-24 text-xs lg:text-sm font-semibold sticky left-0 bg-muted/30 z-10">
+                    Time
+                  </TableHead>
+                  {daysOfWeek.map(day => (
+                    <TableHead key={day} className="min-w-24 lg:min-w-48 text-xs lg:text-sm text-center font-semibold">
+                      <span className="hidden lg:inline">{day}</span>
+                      <span className="lg:hidden">{day.slice(0, 3)}</span>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {timeSlots.map(timeSlot => (
+                  <TableRow key={timeSlot} className="hover:bg-muted/10 transition-colors">
+                    <TableCell className="font-medium text-xs lg:text-sm p-1.5 lg:p-2 bg-muted/20 sticky left-0 z-10 border-r">
+                      <div className="text-center">
+                        <span className="hidden lg:inline">{timeSlot}</span>
+                        <span className="lg:hidden text-[10px] leading-tight">
+                          {timeSlot.split('-')[0]}
+                          <br />
+                          {timeSlot.split('-')[1]}
+                        </span>
+                      </div>
+                    </TableCell>
+                    {daysOfWeek.map(day => {
+                      const entry = filteredEntries.find(
+                        e => e.day_of_week === day && e.time_slot === timeSlot
+                      );
+                      
+                      return (
+                        <TableCell key={`${day}-${timeSlot}`} className="p-1 lg:p-2 align-top">
+                          {entry ? (
+                            <Card className="w-full shadow-soft hover:shadow-md transition-shadow bg-card/80 backdrop-blur-sm border-l-4 border-l-primary">
+                              <CardContent className="p-1.5 lg:p-3">
+                                <div className="space-y-1">
+                                  <div className="font-medium text-xs lg:text-sm truncate text-foreground leading-tight">
+                                    {entry.subject_name}
+                                  </div>
+                                  <div className="text-[10px] lg:text-xs text-muted-foreground truncate">
+                                    {entry.class_name}
+                                  </div>
+                                  <div className="text-[10px] lg:text-xs text-muted-foreground truncate hidden lg:block">
+                                    {entry.teacher_name}
+                                  </div>
+                                  {entry.room_number && (
+                                    <div className="text-[10px] lg:text-xs text-muted-foreground flex items-center gap-1 hidden lg:flex">
+                                      <MapPin className="h-2 w-2 lg:h-3 lg:w-3" />
+                                      {entry.room_number}
+                                    </div>
+                                  )}
+                                  <div className="flex gap-1 mt-1 lg:mt-2 justify-center">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-primary/10 rounded-full"
+                                      onClick={() => handleEdit(entry)}
+                                    >
+                                      <Edit2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-destructive/10 rounded-full"
+                                      onClick={() => handleDelete(entry.id)}
+                                    >
+                                      <Trash2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ) : (
+                            <div className="h-12 lg:h-20 border-2 border-dashed border-muted/30 rounded-lg hover:border-muted/50 transition-colors cursor-pointer flex items-center justify-center group">
+                              <Plus className="h-3 w-3 lg:h-4 lg:w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                            </div>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderListView = () => {
+    const filteredEntries = getFilteredEntries();
+    
+    return (
+      <div className="space-y-2 lg:space-y-4">
+        {filteredEntries.length === 0 ? (
+          <div className="text-center py-8 lg:py-12">
+            <Calendar className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-muted-foreground/50" />
+            <p className="text-muted-foreground text-sm lg:text-base">No schedule entries found</p>
+          </div>
+        ) : (
+          filteredEntries.map(entry => (
+            <Card key={entry.id} className="shadow-soft hover:shadow-md transition-all duration-200 bg-card/80 backdrop-blur-sm">
+              <CardContent className="p-3 lg:p-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-primary/10 text-primary border-primary/20">
+                          {entry.day_of_week}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] sm:text-xs px-1.5 py-0.5 bg-secondary/10 text-secondary-foreground border-secondary/20">
+                          {entry.time_slot}
+                        </Badge>
+                      </div>
+                      
+                      <div className="text-base lg:text-lg font-semibold text-foreground leading-tight">
+                        {entry.subject_name}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs lg:text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3 w-3 lg:h-4 lg:w-4 text-primary/60 flex-shrink-0" />
+                          <span className="truncate">{entry.class_name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3 w-3 lg:h-4 lg:w-4 text-primary/60 flex-shrink-0" />
+                          <span className="truncate">{entry.teacher_name}</span>
+                        </div>
+                        {entry.room_number && (
+                          <div className="flex items-center gap-2 sm:col-span-2">
+                            <MapPin className="h-3 w-3 lg:h-4 lg:w-4 text-primary/60 flex-shrink-0" />
+                            <span>Room {entry.room_number}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2 self-start sm:self-center flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEdit(entry)}
+                        className="touch-target h-8 px-3 hover:bg-primary/10 hover:text-primary border-primary/20"
+                      >
+                        <Edit2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                        <span className="hidden sm:inline ml-1.5">Edit</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDelete(entry.id)}
+                        className="touch-target h-8 px-3 hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                      >
+                        <Trash2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                        <span className="hidden sm:inline ml-1.5">Delete</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96 p-3 md:p-6">
+        <div className="animate-spin rounded-full h-16 w-16 md:h-32 md:w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 lg:space-y-6 p-3 lg:p-6">
+      <div className="flex flex-col gap-3 lg:gap-4">
+        <div>
+          <h1 className="text-xl lg:text-3xl font-bold text-foreground">Timetable Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage class schedules and timetables</p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="w-full sm:w-auto touch-target bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
+              onClick={() => {
+                setEditingEntry(null);
+                setFormData({
+                  day_of_week: '',
+                  time_slot: '',
+                  class_id: '',
+                  subject_id: '',
+                  teacher_id: '',
+                  room_number: ''
+                });
+                setConflicts([]);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Schedule
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="w-[95vw] max-w-lg mx-3 lg:mx-0 max-h-[90vh] overflow-y-auto rounded-xl">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-lg lg:text-xl font-semibold">
+                {editingEntry ? 'Edit Schedule' : 'Add New Schedule'}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Create or update a timetable entry for your school.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-5 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="day_of_week" className="text-sm font-medium">Day</Label>
+                  <Select
+                    value={formData.day_of_week}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, day_of_week: value });
+                      checkConflicts({ ...formData, day_of_week: value });
+                    }}
+                  >
+                    <SelectTrigger className="touch-target h-10">
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {daysOfWeek.map(day => (
+                        <SelectItem key={day} value={day} className="text-sm py-2.5">{day}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time_slot" className="text-sm font-medium">Time Slot</Label>
+                  <Select
+                    value={formData.time_slot}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, time_slot: value });
+                      checkConflicts({ ...formData, time_slot: value });
+                    }}
+                  >
+                    <SelectTrigger className="touch-target h-10">
+                      <SelectValue placeholder="Select time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {timeSlots.map(slot => (
+                        <SelectItem key={slot} value={slot} className="text-sm py-2.5">{slot}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="class_id" className="text-sm font-medium">Class</Label>
+                <Select
+                  value={formData.class_id}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, class_id: value });
+                    checkConflicts({ ...formData, class_id: value });
+                  }}
+                >
+                  <SelectTrigger className="touch-target h-10">
+                    <SelectValue placeholder="Select class" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {classes.map(cls => (
+                      <SelectItem key={cls.id} value={cls.id} className="text-sm py-2.5">
+                        {cls.name} - {cls.section}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="subject_id" className="text-sm font-medium">Subject</Label>
+                <Select
+                  value={formData.subject_id}
+                  onValueChange={(value) => setFormData({ ...formData, subject_id: value })}
+                >
+                  <SelectTrigger className="touch-target h-10">
+                    <SelectValue placeholder="Select subject" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {subjects
+                      .filter(subject => {
+                        const selectedClass = classes.find(c => c.id === formData.class_id);
+                        return !selectedClass || subject.class_level === selectedClass.class_level;
+                      })
+                      .map(subject => (
+                        <SelectItem key={subject.id} value={subject.id} className="text-sm py-2.5">
+                          {subject.name} ({subject.code})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="teacher_id" className="text-sm font-medium">Teacher</Label>
+                <Select
+                  value={formData.teacher_id}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, teacher_id: value });
+                    checkConflicts({ ...formData, teacher_id: value });
+                  }}
+                >
+                  <SelectTrigger className="touch-target h-10">
+                    <SelectValue placeholder="Select teacher" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {teachers.map(teacher => (
+                      <SelectItem key={teacher.id} value={teacher.id} className="text-sm py-2.5">
+                        <div className="flex flex-col items-start">
+                          <span>{teacher.full_name}</span>
+                          {teacher.subject_specialization && (
+                            <span className="text-xs text-muted-foreground">
+                              ({teacher.subject_specialization})
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="room_number" className="text-sm font-medium">Room Number (Optional)</Label>
+                <Input
+                  id="room_number"
+                  value={formData.room_number}
+                  onChange={(e) => {
+                    setFormData({ ...formData, room_number: e.target.value });
+                    checkConflicts({ ...formData, room_number: e.target.value });
+                  }}
+                  placeholder="e.g., Room 101"
+                  className="touch-target h-10"
+                />
+              </div>
+
+              {conflicts.length > 0 && (
+                <div className="p-3 border border-destructive rounded-lg bg-destructive/5 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <span className="text-sm font-medium text-destructive">Schedule Conflicts</span>
+                  </div>
+                  <ul className="text-xs lg:text-sm text-destructive space-y-1 pl-6">
+                    {conflicts.map((conflict, index) => (
+                      <li key={index} className="list-disc">{conflict}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button 
+                  type="submit" 
+                  disabled={conflicts.length > 0} 
+                  className="w-full sm:w-auto touch-target bg-primary hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {editingEntry ? 'Update' : 'Create'} Schedule
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsDialogOpen(false)} 
+                  className="w-full sm:w-auto touch-target"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Tabs value={selectedView} onValueChange={(value) => setSelectedView(value as any)}>
+        <div className="flex flex-col gap-3 lg:gap-4">
+          <TabsList className="w-full grid grid-cols-3 h-auto p-1 bg-muted/50 rounded-lg">
+            <TabsTrigger 
+              value="weekly" 
+              className="text-xs sm:text-sm py-2.5 px-3 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-soft"
+            >
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden sm:inline">Weekly</span>
+              <span className="sm:hidden">Week</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="teacher" 
+              className="text-xs sm:text-sm py-2.5 px-3 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-soft"
+            >
+              <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden sm:inline">Teacher</span>
+              <span className="sm:hidden">Prof</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="class" 
+              className="text-xs sm:text-sm py-2.5 px-3 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-soft"
+            >
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              Class
+            </TabsTrigger>
+          </TabsList>
+
+          {(selectedView === 'teacher' || selectedView === 'class') && (
+            <div className="w-full">
+              <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+                <SelectTrigger className="touch-target h-11 bg-background/50 backdrop-blur-sm">
+                  <SelectValue placeholder={`Select ${selectedView}`} />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {selectedView === 'teacher'
+                    ? teachers.map(teacher => (
+                        <SelectItem key={teacher.id} value={teacher.id} className="text-sm py-2.5">
+                          {teacher.full_name}
+                        </SelectItem>
+                      ))
+                    : classes.map(cls => (
+                        <SelectItem key={cls.id} value={cls.id} className="text-sm py-2.5">
+                          {cls.name} - {cls.section}
+                        </SelectItem>
+                      ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <TabsContent value="weekly" className="space-y-3 lg:space-y-4">
+          <Card className="shadow-soft bg-card/80 backdrop-blur-sm border-0 shadow-lg">
+            <CardHeader className="pb-3 lg:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base lg:text-xl">
+                <Calendar className="h-4 w-4 lg:h-5 lg:w-5 text-primary" />
+                Weekly Timetable
+              </CardTitle>
+              <CardDescription className="text-xs lg:text-sm">
+                View and manage the weekly class schedule
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-2 lg:p-6">
+              {renderWeeklyView()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="teacher" className="space-y-3 lg:space-y-4">
+          <Card className="shadow-soft bg-card/80 backdrop-blur-sm border-0 shadow-lg">
+            <CardHeader className="pb-3 lg:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+                <Users className="h-4 w-4 lg:h-5 lg:w-5 text-primary" />
+                Teacher Schedule
+              </CardTitle>
+              <CardDescription className="text-xs lg:text-sm">
+                View schedule by teacher
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 lg:p-6">
+              {selectedFilter ? renderListView() : (
+                <div className="text-center py-8 lg:py-12">
+                  <Users className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-muted-foreground/50" />
+                  <p className="text-muted-foreground text-sm lg:text-base">
+                    Select a teacher to view their schedule
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="class" className="space-y-3 lg:space-y-4">
+          <Card className="shadow-soft bg-card/80 backdrop-blur-sm border-0 shadow-lg">
+            <CardHeader className="pb-3 lg:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
+                <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-primary" />
+                Class Schedule
+              </CardTitle>
+              <CardDescription className="text-xs lg:text-sm">
+                View schedule by class
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 lg:p-6">
+              {selectedFilter ? renderListView() : (
+                <div className="text-center py-8 lg:py-12">
+                  <Clock className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-muted-foreground/50" />
+                  <p className="text-muted-foreground text-sm lg:text-base">
+                    Select a class to view their schedule
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
