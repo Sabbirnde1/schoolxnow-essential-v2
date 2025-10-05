@@ -86,17 +86,37 @@ const SuperAdminDashboard = () => {
     // Set up real-time subscriptions
     const schoolsChannel = supabase
       .channel('schools_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schools' }, () => {
-        fetchDashboardData();
-      })
-      .subscribe();
+      .on('postgres_changes' as any, 
+        { event: '*', schema: 'public', table: 'schools' }, 
+        () => {
+          console.log('School data changed, refreshing dashboard...');
+          fetchDashboardData();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to schools changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to schools changes');
+        }
+      });
 
     const studentsChannel = supabase
       .channel('students_changes') 
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => {
-        fetchDashboardData();
-      })
-      .subscribe();
+      .on('postgres_changes' as any, 
+        { event: '*', schema: 'public', table: 'students' }, 
+        () => {
+          console.log('Student data changed, refreshing dashboard...');
+          fetchDashboardData();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to students changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to students changes');
+        }
+      });
 
     return () => {
       supabase.removeChannel(schoolsChannel);

@@ -155,9 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let profileSubscription: any = null;
     
     const setupProfileSubscription = (userId: string) => {
-      profileSubscription = supabase
-        .channel('profile-and-role-changes')
-        .on(
+      try {
+        // Create a channel with proper error handling
+        const channel = supabase.channel('profile-and-role-changes');
+        
+        // Add profile changes listener
+        channel.on(
           'postgres_changes',
           {
             event: 'UPDATE',
@@ -170,8 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Refetch profile to get updated role
             fetchProfile(userId);
           }
-        )
-        .on(
+        );
+        
+        // Add role changes listener
+        channel.on(
           'postgres_changes',
           {
             event: '*',
@@ -184,8 +189,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Refetch profile to get updated role
             fetchProfile(userId);
           }
-        )
-        .subscribe();
+        );
+        
+        // Subscribe with error handling
+        channel.subscribe((status) => {
+          if (status !== 'SUBSCRIBED') {
+            console.warn('Profile subscription status:', status);
+          } else {
+            console.log('Successfully subscribed to profile changes');
+          }
+        });
+        
+        profileSubscription = channel;
+      } catch (error) {
+        console.error('Error setting up profile subscription:', error);
+      }
     };
 
     if (user?.id) {

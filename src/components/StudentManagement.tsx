@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,19 +62,23 @@ export function StudentManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
-  const form = useForm<{
-    full_name: string;
-    student_id: string;
-    gender: string;
-    date_of_birth: string;
-    guardian_phone: string;
-    guardian_email: string;
-    address: string;
-    class_id: string;
-    father_name: string;
-    mother_name: string;
-    blood_group: string;
-  }>({
+  const studentSchema = z.object({
+    full_name: z.string().min(1, "Full name is required"),
+    student_id: z.string().min(1, "Student ID is required"),
+    gender: z.string().min(1, "Gender is required"),
+    date_of_birth: z.string().min(1, "Date of birth is required"),
+    guardian_phone: z.string().min(1, "Guardian phone is required"),
+    guardian_email: z.string().email().optional().nullable(),
+    address: z.string().min(1, "Address is required"),
+    class_id: z.string().optional(),
+    father_name: z.string().min(1, "Father's name is required"),
+    mother_name: z.string().min(1, "Mother's name is required"),
+    blood_group: z.string().optional()
+  });
+
+  type StudentFormData = z.infer<typeof studentSchema>;
+
+  const form = useForm<StudentFormData>({
     defaultValues: {
       full_name: "",
       student_id: "",
@@ -88,6 +93,57 @@ export function StudentManagement() {
       blood_group: ""
     }
   });
+
+  // Restore fetchData function before useEffect
+  const fetchData = useCallback(async () => {
+    if (!profile?.school_id) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Fetch students
+      const { data: studentsData, error: studentsError } = await (supabase as any)
+        .from('students')
+        .select(`
+          *,
+          classes (
+            name,
+            section
+          )
+        `)
+        .eq('school_id', profile.school_id)
+        .order('admission_date', { ascending: false });
+
+      if (studentsError) throw studentsError;
+
+      // Fetch classes
+      const { data: classesData, error: classesError } = await (supabase as any)
+        .from('classes')
+        .select('*')
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true)
+        .order('name');
+
+      if (classesError) throw classesError;
+
+      setStudents(studentsData || []);
+      setClasses(classesData || []);
+    } catch (error: unknown) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load students data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.school_id, toast]);
+
+  
 
   useEffect(() => {
     if (profile?.school_id) {
@@ -135,95 +191,74 @@ export function StudentManagement() {
       supabase.removeChannel(studentsChannel);
       supabase.removeChannel(classesChannel);
     };
-  }, [profile]);
+  }, [profile, fetchData]);
 
-  const fetchData = async () => {
+  const handleAddStudent = async (values: StudentFormData) => {
     if (!profile?.school_id) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Fetch students
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`
-          *,
-          classes (
-            name,
-            section
-          )
-        `)
-        .eq('school_id', profile.school_id)
-        .order('admission_date', { ascending: false });
-
-      if (studentsError) throw studentsError;
-
-      // Fetch classes
-      const { data: classesData, error: classesError } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('school_id', profile.school_id)
-        .eq('is_active', true)
-        .order('name');
-
-      if (classesError) throw classesError;
-
-      setStudents(studentsData || []);
-      setClasses(classesData || []);
-    } catch (error: any) {
-      console.error('Error fetching data:', error);
       toast({
         title: "Error",
-        description: "Failed to load students data",
+        description: "School ID not found. Please contact your administrator.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
-
-  const handleAddStudent = async (values: any) => {
-    if (!profile?.school_id) return;
 
     // Validate required fields
-    if (!values.gender) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a gender",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!values.full_name || !values.student_id || !values.date_of_birth || 
-        !values.guardian_phone || !values.address || !values.father_name || !values.mother_name) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      // Filter out empty optional fields
+      // Validate form data against schema
+      const validationResult = studentSchema.safeParse(values);
+      
+      if (!validationResult.success) {
+        const errors = validationResult.error.errors;
+        const firstError = errors[0];
+        
+        toast({
+          title: "Validation Error",
+          description: firstError.message || "Please check all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Generate admission date as current date
+      const admissionDate = new Date().toISOString().split('T')[0];
+
+      // Filter out empty optional fields and add required fields
       const studentData = {
-        ...values,
-        school_id: profile.school_id,
+        full_name: values.full_name,
+        student_id: values.student_id,
+        date_of_birth: values.date_of_birth,
         gender: (values.gender || '').toLowerCase(),
+        father_name: values.father_name,
+        mother_name: values.mother_name,
+        guardian_phone: values.guardian_phone,
+        address: values.address,
+        school_id: profile.school_id,
         class_id: values.class_id || null,
         guardian_email: values.guardian_email || null,
         blood_group: values.blood_group || null,
+        status: 'active' as const,
+        admission_date: admissionDate
       };
 
-      const { error } = await supabase
-        .from('students')
-        .insert(studentData);
+      console.log('Attempting to add student with data:', studentData);
 
-      if (error) throw error;
+      const { data, error } = await (supabase as any)
+        .from('students')
+        .insert(studentData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      console.log('Successfully added student:', data);
 
       toast({
         title: "Success",
@@ -233,21 +268,37 @@ export function StudentManagement() {
       setIsAddDialogOpen(false);
       form.reset();
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding student:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add student",
-        variant: "destructive",
-      });
+      
+      if (error instanceof Error) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to add student",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to add student",
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const handleEditStudent = async (values: any) => {
-    if (!editingStudent) return;
+  const handleEditStudent = async (values: StudentFormData) => {
+    if (!editingStudent) {
+      toast({
+        title: "Error",
+        description: "No student selected for editing",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('students')
         .update(values)
         .eq('id', editingStudent.id);
@@ -262,11 +313,11 @@ export function StudentManagement() {
       setEditingStudent(null);
       form.reset();
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating student:', error);
       toast({
         title: "Error",
-        description: "Failed to update student",
+        description: error instanceof Error ? error.message : "Failed to update student",
         variant: "destructive",
       });
     }
@@ -274,7 +325,7 @@ export function StudentManagement() {
 
   const handleDeleteStudent = async (studentId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('students')
         .delete()
         .eq('id', studentId);
@@ -287,11 +338,11 @@ export function StudentManagement() {
       });
 
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting student:', error);
       toast({
         title: "Error",
-        description: "Failed to delete student",
+        description: error instanceof Error ? error.message : "Failed to delete student",
         variant: "destructive",
       });
     }

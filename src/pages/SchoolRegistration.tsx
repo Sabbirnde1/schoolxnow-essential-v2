@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,9 @@ const schoolRegistrationSchema = z.object({
   addressBangla: z.string().optional(),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   email: z.string().email("Invalid email address"),
-  eiinNumber: z.string().optional(),
+  eiinNumber: z.string()
+    .regex(/^\d{6}$/, "EIIN number must be exactly 6 digits")
+    .optional(),
   establishedYear: z.number().min(1800).max(new Date().getFullYear()).optional(),
   adminFullName: z.string().min(2, "Admin name must be at least 2 characters"),
   adminEmail: z.string().email("Invalid email address"),
@@ -42,6 +44,139 @@ const SchoolRegistration = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Test Supabase connection on mount
+  useEffect(() => {
+    const testSupabaseConnection = async () => {
+      console.log('Testing Supabase connection...');
+      
+      try {
+        // Test database connectivity by attempting to make a simple query
+        const { count, error: configError } = await supabase
+          .from('schools')
+          .select('*', { count: 'exact', head: true });
+
+        if (configError) {
+          if (configError.message?.includes('JWT')) {
+            throw new Error('Invalid API configuration');
+          }
+          if (configError.message?.includes('FetchError')) {
+            throw new Error('Unable to reach Supabase server');
+          }
+          throw configError;
+        }
+
+        // If we got here, the connection is working
+        const { data: timeData, error: timeError } = await supabase
+          .from('schools')
+          .select('created_at')
+          .limit(1);
+
+        if (timeError) {
+          console.error('Database connection error:', timeError);
+          let errorMessage = 'Could not connect to the database.';
+          
+          if (timeError.code === 'PGRST301') {
+            errorMessage = 'Database access denied. Please check your credentials.';
+          } else if (timeError.code === '23505') {
+            errorMessage = 'Database constraint violation. Please try again.';
+          } else if (timeError.code === '42501') {
+            errorMessage = 'Insufficient database permissions.';
+          } else if (timeError.message?.includes('Failed to fetch')) {
+            errorMessage = 'Network error. Please check your internet connection.';
+          }
+          
+          toast({
+            title: 'Database Connection Error',
+            description: errorMessage + ' Please try again later or contact support.',
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        // Test auth service
+        const { data: authData, error: authError } = await supabase.auth.getSession();
+        if (authError) {
+          console.error('Auth service error:', authError);
+          let errorMessage = 'Authentication service is unavailable.';
+          
+          if (authError.message?.includes('JWT')) {
+            errorMessage = 'Invalid authentication token.';
+          } else if (authError.message?.includes('network')) {
+            errorMessage = 'Network error connecting to authentication service.';
+          }
+          
+          toast({
+            title: 'Authentication Service Error',
+            description: errorMessage + ' Please refresh the page or try again later.',
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        // If user is already authenticated, redirect to dashboard
+        if (authData.session) {
+          console.log('User already authenticated, redirecting to dashboard');
+          toast({
+            title: 'Already Logged In',
+            description: 'You are already logged in. Redirecting to dashboard...',
+            variant: 'default'
+          });
+          navigate('/dashboard');
+          return;
+        }
+
+        console.log('✅ Supabase connection test successful');
+        console.log('- Database connection: OK');
+        console.log('- Auth service: OK');
+        console.log('- User session: Not authenticated (expected)');
+        
+        toast({
+          title: 'Connection Test Successful',
+          description: 'Ready to register your school.',
+          variant: 'default'
+        });
+
+      } catch (err) {
+        console.error('Unexpected error during connection test:', err);
+        let errorTitle = 'Connection Error';
+        let errorMessage = 'An unexpected error occurred. Please try again later.';
+
+        if (err instanceof Error) {
+          if (err.message.includes('SUPABASE_URL')) {
+            errorTitle = 'Configuration Error';
+            errorMessage = 'Supabase URL is not properly configured. Please contact support.';
+          } else if (err.message.includes('SUPABASE_ANON_KEY')) {
+            errorTitle = 'Configuration Error';
+            errorMessage = 'Supabase API key is not properly configured. Please contact support.';
+          } else if (err.message.includes('Failed to fetch')) {
+            errorTitle = 'Network Error';
+            errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+          } else if (err.message.includes('timeout')) {
+            errorTitle = 'Timeout Error';
+            errorMessage = 'The server is taking too long to respond. Please try again later.';
+          }
+        }
+
+        toast({
+          title: errorTitle,
+          description: errorMessage,
+          variant: 'destructive'
+        });
+
+        // Show a help message if there are multiple errors
+        if (Object.keys(err).length > 1) {
+          console.log('Troubleshooting tips:');
+          console.log('1. Check your internet connection');
+          console.log('2. Verify Supabase configuration in .env file');
+          console.log('3. Ensure the database is running');
+          console.log('4. Check if the Supabase service is operational');
+        }
+      }
+    };
+
+    testSupabaseConnection();
+  }, [toast, navigate]);
+
   const handleInputChange = (field: keyof SchoolRegistrationForm, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
@@ -52,14 +187,18 @@ const SchoolRegistration = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submission started');
     setErrors({});
+    setLoading(true);
     
     try {
+      console.log('Form data before validation:', formData);
+      
       // Validate form data
       const validatedData = schoolRegistrationSchema.parse(formData);
-      setLoading(true);
+      console.log("Form validation passed:", validatedData);
 
-      // Step 1: Create the school
+      // Step 1: Create the school with error handling
       const { data: schoolData, error: schoolError } = await supabase
         .from("schools")
         .insert({
@@ -73,31 +212,77 @@ const SchoolRegistration = () => {
           eiin_number: validatedData.eiinNumber || null,
           established_year: validatedData.establishedYear || null,
           is_active: true,
-        })
+        } as any)
         .select()
         .single();
 
-      if (schoolError) throw schoolError;
+      if (schoolError || !schoolData) {
+        console.error('School creation error:', schoolError);
+        
+        // Check for EIIN number uniqueness violation
+        if (schoolError?.message?.includes('schools_eiin_number_key')) {
+          toast({
+            title: "Registration Failed",
+            description: "This EIIN number is already registered. Please verify the number or contact support if you believe this is an error.",
+            variant: "destructive",
+          });
+          setErrors(prev => ({
+            ...prev,
+            eiinNumber: "This EIIN number is already registered"
+          }));
+        } else {
+          toast({
+            title: "Registration Failed",
+            description: schoolError?.message || "Failed to create school. Please try again.",
+            variant: "destructive",
+          });
+          console.error('Detailed error:', schoolError);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // At this point, schoolData is guaranteed to be non-null due to the check above
+      // Use type assertion to work around complex Supabase type inference
+      const createdSchool: any = schoolData;
+      console.log('School created successfully:', createdSchool);
 
       // Step 2: Sign up the admin user with school_id in metadata
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: userData, error: signUpError } = await supabase.auth.signUp({
         email: validatedData.adminEmail,
         password: validatedData.adminPassword,
         options: {
           data: {
             full_name: validatedData.adminFullName,
             role: "school_admin",
-            school_id: schoolData.id,
+            school_id: createdSchool.id,
           },
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth`,
         },
       });
 
       if (signUpError) {
-        // If user signup fails, we should ideally delete the school
-        // But for now, we'll just show the error
-        throw signUpError;
+        console.error('User signup error:', signUpError);
+        // If user signup fails, delete the school
+        const deleteResult: any = await (supabase as any)
+          .from('schools')
+          .delete()
+          .eq('id', createdSchool.id);
+          
+        if (deleteResult.error) {
+          console.error('Failed to delete school after user signup failed:', deleteResult.error);
+        }
+        
+        toast({
+          title: "Registration Failed",
+          description: "Failed to create admin account. Please try again.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
       }
+
+      console.log('Admin user created successfully:', userData);
 
       toast({
         title: "Registration Successful!",
@@ -106,8 +291,11 @@ const SchoolRegistration = () => {
 
       // Redirect to auth page
       setTimeout(() => navigate("/auth"), 2000);
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Registration error:', error);
+      
       if (error instanceof z.ZodError) {
+        console.log('Validation errors:', error.errors);
         const fieldErrors: Record<string, string> = {};
         error.errors.forEach((err) => {
           if (err.path[0]) {
@@ -115,11 +303,23 @@ const SchoolRegistration = () => {
           }
         });
         setErrors(fieldErrors);
-      } else {
+        toast({
+          variant: "destructive",
+          title: "Validation Failed",
+          description: "Please check the form for errors and try again.",
+        });
+      } else if (error instanceof Error) {
         toast({
           variant: "destructive",
           title: "Registration Failed",
           description: error.message || "An error occurred during registration. Please try again.",
+        });
+      } else {
+        console.error('Unknown error:', error);
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: "An unexpected error occurred. Please try again.",
         });
       }
     } finally {
