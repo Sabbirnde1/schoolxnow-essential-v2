@@ -475,13 +475,13 @@ export function ReportsAnalytics() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-3 md:p-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Select value={selectedClass} onValueChange={setSelectedClass}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 touch-target">
                 <SelectValue placeholder="All Classes" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-50">
                 <SelectItem value="all">All Classes</SelectItem>
                 {classes.map((cls) => (
                   <SelectItem key={cls.id} value={cls.id}>
@@ -492,10 +492,10 @@ export function ReportsAnalytics() {
             </Select>
 
             <Select value={selectedExam} onValueChange={setSelectedExam}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 touch-target">
                 <SelectValue placeholder="All Exams" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-50">
                 <SelectItem value="all">All Exams</SelectItem>
                 {exams.map((exam) => (
                   <SelectItem key={exam.id} value={exam.id}>
@@ -506,10 +506,10 @@ export function ReportsAnalytics() {
             </Select>
 
             <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 touch-target">
                 <SelectValue placeholder="All Students" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-50">
                 <SelectItem value="all">All Students</SelectItem>
                 {students
                   .filter(s => selectedClass === "all" || s.class_id === selectedClass)
@@ -526,19 +526,19 @@ export function ReportsAnalytics() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 h-auto">
-          <TabsTrigger value="performance" className="flex items-center gap-2 py-2">
-            <Award className="h-4 w-4" />
+        <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+          <TabsTrigger value="performance" className="flex items-center gap-1 md:gap-2 py-2 px-2 md:px-4 text-xs md:text-sm touch-target-sm">
+            <Award className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">Performance</span>
             <span className="sm:hidden">Perf</span>
           </TabsTrigger>
-          <TabsTrigger value="attendance" className="flex items-center gap-2 py-2">
-            <Target className="h-4 w-4" />
+          <TabsTrigger value="attendance" className="flex items-center gap-1 md:gap-2 py-2 px-2 md:px-4 text-xs md:text-sm touch-target-sm">
+            <Target className="h-3 w-3 md:h-4 md:w-4" />
             <span className="hidden sm:inline">Attendance</span>
             <span className="sm:hidden">Attend</span>
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="flex items-center gap-2 py-2">
-            <BarChart3 className="h-4 w-4" />
+          <TabsTrigger value="analytics" className="flex items-center gap-1 md:gap-2 py-2 px-2 md:px-4 text-xs md:text-sm touch-target-sm">
+            <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
             <span>Analytics</span>
           </TabsTrigger>
         </TabsList>
