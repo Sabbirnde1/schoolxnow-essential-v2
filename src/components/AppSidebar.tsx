@@ -161,6 +161,12 @@ export function AppSidebar({ activeModule, setActiveModule }: AppSidebarProps) {
           module: "students"
         },
         {
+          title: "My Subjects",
+          url: "#",
+          icon: BookOpen,
+          module: "subjects"
+        },
+        {
           title: "Attendance",
           url: "#",
           icon: UserCheck,

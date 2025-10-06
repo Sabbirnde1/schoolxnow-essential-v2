@@ -72,6 +72,7 @@ const Index = () => {
     if (profile?.role === 'teacher') {
       switch (activeModule) {
         case 'students': return <StudentManagement />;
+        case 'subjects': return <SubjectManagement />;
         case 'attendance': return <AttendanceManagement />;
         case 'exam-marks': return (
           <div className="container mx-auto p-4 md:p-6 space-y-6">
