@@ -8,6 +8,10 @@ DROP POLICY IF EXISTS "School members can insert students" ON public.students;
 DROP POLICY IF EXISTS "School members can update students" ON public.students;
 DROP POLICY IF EXISTS "School admins can delete students" ON public.students;
 DROP POLICY IF EXISTS "Super admins manage all students" ON public.students;
+DROP POLICY IF EXISTS "Super admins can select all students" ON public.students;
+DROP POLICY IF EXISTS "Super admins can insert all students" ON public.students;
+DROP POLICY IF EXISTS "Super admins can update all students" ON public.students;
+DROP POLICY IF EXISTS "Super admins can delete all students" ON public.students;
 DROP POLICY IF EXISTS "Teachers and admins can view students" ON public.students;
 DROP POLICY IF EXISTS "Teachers and admins can insert students" ON public.students;
 DROP POLICY IF EXISTS "Teachers and admins can update students" ON public.students;
@@ -79,9 +83,49 @@ USING (
   )
 );
 
--- Super admin can manage all students in all schools
-CREATE POLICY "Super admins manage all students"
-ON public.students FOR ALL
+-- Super admin policies for all operations
+CREATE POLICY "Super admins can select all students"
+ON public.students FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'super_admin'
+  )
+);
+
+CREATE POLICY "Super admins can insert all students"
+ON public.students FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'super_admin'
+  )
+);
+
+CREATE POLICY "Super admins can update all students"
+ON public.students FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'super_admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'super_admin'
+  )
+);
+
+CREATE POLICY "Super admins can delete all students"
+ON public.students FOR DELETE
 TO authenticated
 USING (
   EXISTS (
