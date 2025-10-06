@@ -701,7 +701,10 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
           </CardContent>
         </Card>
 
-        <Card className="group relative overflow-hidden border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-green-500/5 via-card to-green-500/3">
+        <Card 
+          className="group relative overflow-hidden border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-green-500/5 via-card to-green-500/3 cursor-pointer"
+          onClick={() => setActiveModule?.('subjects')}
+        >
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 md:pb-3 relative z-10 p-3 md:p-6">
             <CardTitle className="text-xs md:text-sm font-semibold text-muted-foreground">My Subjects</CardTitle>
