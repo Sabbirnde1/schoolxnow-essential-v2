@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ThemeProvider } from './contexts/ThemeContext';
 import './index.css';
 
 // Add better error handling for root element
@@ -29,11 +30,19 @@ if (!rootElement) {
   `;
   
   // Use the fallback element
-  createRoot(fallbackRoot).render(<App />);
+  createRoot(fallbackRoot).render(
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  );
 } else {
   // Normal initialization
   console.log("✅ Found root element, mounting React app...");
-  createRoot(rootElement).render(<App />);
+  createRoot(rootElement).render(
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  );
 }
 
 // Log successful initialization

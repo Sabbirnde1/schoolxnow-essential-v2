@@ -9,6 +9,7 @@ import {
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { FeedbackSurvey } from "@/components/FeedbackSurvey";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import logo from "@/assets/logo.png";
 import { Menu, MessageSquare } from "lucide-react";
@@ -43,6 +44,7 @@ export function Layout({ children, activeModule, setActiveModule }: LayoutProps)
               </h1>
             </div>
             <div className="ml-auto flex items-center gap-2">
+              <ThemeToggle />
               <NotificationCenter />
             </div>
           </header>
