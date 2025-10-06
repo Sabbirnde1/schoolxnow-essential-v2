@@ -84,9 +84,8 @@ USING (
 );
 
 -- Super admin policies for all operations
-CREATE POLICY "Super admins can select all students"
-ON public.students FOR SELECT
-TO authenticated
+CREATE POLICY "Super admins can select all students" ON public.students
+FOR SELECT TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM public.user_roles ur
@@ -95,9 +94,8 @@ USING (
   )
 );
 
-CREATE POLICY "Super admins can insert all students"
-ON public.students FOR INSERT
-TO authenticated
+CREATE POLICY "Super admins can insert all students" ON public.students
+FOR INSERT TO authenticated
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.user_roles ur
@@ -106,9 +104,8 @@ WITH CHECK (
   )
 );
 
-CREATE POLICY "Super admins can update all students"
-ON public.students FOR UPDATE
-TO authenticated
+CREATE POLICY "Super admins can update all students" ON public.students
+FOR UPDATE TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM public.user_roles ur
@@ -124,9 +121,8 @@ WITH CHECK (
   )
 );
 
-CREATE POLICY "Super admins can delete all students"
-ON public.students FOR DELETE
-TO authenticated
+CREATE POLICY "Super admins can delete all students" ON public.students
+FOR DELETE TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM public.user_roles ur
