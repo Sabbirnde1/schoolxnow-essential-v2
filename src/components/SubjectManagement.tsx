@@ -113,14 +113,67 @@ export function SubjectManagement() {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('school_id', schoolId)
-        .order('name');
+      // For teachers, only fetch subjects they teach (based on timetable)
+      if (profile?.role === 'teacher') {
+        // First get the teacher record
+        const { data: teacherData, error: teacherError } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('user_id', profile.user_id)
+          .single();
 
-      if (error) throw error;
-      setSubjects(data || []);
+        if (teacherError) {
+          console.error('Error fetching teacher:', teacherError);
+          setSubjects([]);
+          return;
+        }
+
+        if (!teacherData) {
+          setSubjects([]);
+          return;
+        }
+
+        // Get unique subject IDs from timetable for this teacher
+        const { data: timetableData, error: timetableError } = await supabase
+          .from('timetable')
+          .select('subject_id')
+          .eq('teacher_id', teacherData.id)
+          .eq('school_id', schoolId);
+
+        if (timetableError) {
+          console.error('Error fetching timetable:', timetableError);
+          setSubjects([]);
+          return;
+        }
+
+        // Get unique subject IDs
+        const subjectIds = [...new Set(timetableData?.map(t => t.subject_id) || [])];
+
+        if (subjectIds.length === 0) {
+          setSubjects([]);
+          return;
+        }
+
+        // Fetch subjects
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('*')
+          .in('id', subjectIds)
+          .order('name');
+
+        if (error) throw error;
+        setSubjects(data || []);
+      } else {
+        // For admins, fetch all subjects in the school
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('*')
+          .eq('school_id', schoolId)
+          .order('name');
+
+        if (error) throw error;
+        setSubjects(data || []);
+      }
     } catch (error: any) {
       console.error('Error fetching subjects:', error);
       toast({
@@ -280,17 +333,25 @@ export function SubjectManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Subject Management</h1>
-          <p className="text-muted-foreground">Manage curriculum subjects by class</p>
+          <h1 className="text-3xl font-bold text-foreground">
+            {profile?.role === 'teacher' ? 'My Subjects' : 'Subject Management'}
+          </h1>
+          <p className="text-muted-foreground">
+            {profile?.role === 'teacher' 
+              ? 'View subjects you teach based on your timetable' 
+              : 'Manage curriculum subjects by class'}
+          </p>
         </div>
-        <Button 
-          className="bg-gradient-primary hover:opacity-90"
-          onClick={() => setIsAddDialogOpen(true)}
-          disabled={profile?.role === 'super_admin' && !selectedSchoolId}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add New Subject
-        </Button>
+        {profile?.role !== 'teacher' && (
+          <Button 
+            className="bg-gradient-primary hover:opacity-90"
+            onClick={() => setIsAddDialogOpen(true)}
+            disabled={profile?.role === 'super_admin' && !selectedSchoolId}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add New Subject
+          </Button>
+        )}
       </div>
 
       {/* School Selector for Super Admin */}
@@ -385,11 +446,32 @@ export function SubjectManagement() {
       {/* Subjects List */}
       <Card className="shadow-soft">
         <CardHeader>
-          <CardTitle>Subjects ({filteredSubjects.length})</CardTitle>
+          <CardTitle>
+            {profile?.role === 'teacher' ? 'My Subjects' : 'Subjects'} ({filteredSubjects.length})
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredSubjects.map((subject) => (
+          {filteredSubjects.length === 0 && profile?.role === 'teacher' ? (
+            <div className="text-center py-8">
+              <Book className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Subjects Assigned</h3>
+              <p className="text-muted-foreground">
+                You don't have any subjects assigned in the timetable yet. Please contact your school administrator.
+              </p>
+            </div>
+          ) : filteredSubjects.length === 0 ? (
+            <div className="text-center py-8">
+              <Book className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Subjects Found</h3>
+              <p className="text-muted-foreground">
+                {profile?.role === 'super_admin' && !selectedSchoolId
+                  ? 'Please select a school to view subjects.'
+                  : 'Get started by adding your first subject.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredSubjects.map((subject) => (
               <div key={subject.id} className="border border-border rounded-lg p-4 hover:shadow-soft transition-shadow duration-200">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                   <div className="flex items-center gap-4">
@@ -420,28 +502,31 @@ export function SubjectManagement() {
                       )}
                     </div>
                     
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => openEditDialog(subject)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDeleteSubject(subject.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {profile?.role !== 'teacher' && (
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => openEditDialog(subject)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteSubject(subject.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
