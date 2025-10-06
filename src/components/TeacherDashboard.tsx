@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ExamMarksEntry } from '@/components/ExamMarksEntry';
 import { QuickAttendanceSheet } from '@/components/QuickAttendanceSheet';
+import { ClassPerformanceAnalytics } from '@/components/ClassPerformanceAnalytics';
 import { 
   Users, 
   GraduationCap, 
@@ -23,7 +24,8 @@ import {
   TrendingUp,
   Target,
   Activity,
-  Zap
+  Zap,
+  BarChart3
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -1082,6 +1084,26 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
         </Card>
         </div>
       </div>
+
+      {/* Performance Analytics */}
+      <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-indigo-500/5">
+        <CardHeader className="border-b border-border/50 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 p-3 md:p-6">
+          <CardTitle className="flex items-center gap-2 md:gap-3 text-sm md:text-lg">
+            <div className="p-1.5 md:p-2 bg-indigo-500/10 rounded-full">
+              <BarChart3 className="h-3.5 w-3.5 md:h-5 md:w-5 text-indigo-500" />
+            </div>
+            <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+              Performance Analytics
+            </span>
+            <Badge variant="secondary" className="ml-auto bg-indigo-500/10 text-indigo-600 text-xs">
+              Live Data
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 md:p-6">
+          <ClassPerformanceAnalytics />
+        </CardContent>
+      </Card>
 
       {/* Teacher Profile */}
       {teacherInfo && (
