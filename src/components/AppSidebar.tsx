@@ -11,7 +11,8 @@ import {
   UserCheck,
   ClipboardList,
   LogOut,
-  Award
+  Award,
+  ArrowRightLeft
 } from "lucide-react";
 import {
   Sidebar,
@@ -116,6 +117,12 @@ export function AppSidebar({ activeModule, setActiveModule }: AppSidebarProps) {
           url: "#",
           icon: ClipboardList,
           module: "subjects"
+        },
+        {
+          title: "Class Assignment",
+          url: "#",
+          icon: ArrowRightLeft,
+          module: "class-assignment"
         },
         {
           title: "Attendance",

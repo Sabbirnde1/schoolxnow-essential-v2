@@ -19,6 +19,7 @@ import SchoolAdminDashboard from "@/components/SchoolAdminDashboard";
 import TeacherDashboard from "@/components/TeacherDashboard";
 import { ExamMarksEntry } from "@/components/ExamMarksEntry";
 import { ReportsAnalytics } from "@/components/ReportsAnalytics";
+import { ClassAssignment } from "@/components/ClassAssignment";
 
 const Index = () => {
   const { user, profile, loading } = useAuth();
@@ -61,6 +62,7 @@ const Index = () => {
         case 'timetable': return <TimetableManagement />;
         case 'users': return <TeacherManagement />; // School admin manages teachers
         case 'reports': return <ReportsAnalytics />;
+        case 'class-assignment': return <ClassAssignment />;
         case 'settings': return <Settings />;
         case 'dashboard':
         default: return <SchoolAdminDashboard />;
