@@ -89,11 +89,4 @@ USING (
     WHERE ur.user_id = auth.uid()
     AND ur.role = 'super_admin'
   )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.role = 'super_admin'
-  )
 );
