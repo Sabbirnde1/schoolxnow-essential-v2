@@ -33,9 +33,9 @@ if (Test-Path $migrationFile) {
         # Try to find Supabase project URL from .env or config
         if (Test-Path ".env") {
             $envContent = Get-Content ".env" -Raw
-            if ($envContent -match "VITE_SUPABASE_URL=([^\s]+)") {
-                $supabaseUrl = $matches[1]
-                $projectRef = ($supabaseUrl -replace "https://([^.]+)\.supabase\.co", '$1')
+            if ($envContent -match "VITE_SUPABASE_URL=(.+)") {
+                $supabaseUrl = $matches[1].Trim()
+                $projectRef = $supabaseUrl -replace "https://", "" -replace ".supabase.co", "" -replace "/.*", ""
                 $dashboardUrl = "https://supabase.com/dashboard/project/$projectRef/sql/new"
                 
                 Write-Host ""
