@@ -7,6 +7,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import logo from "@/assets/logo.png";
 import { Menu } from "lucide-react";
 
@@ -36,6 +37,9 @@ export function Layout({ children, activeModule, setActiveModule }: LayoutProps)
               <h1 className="text-base sm:text-lg md:text-xl font-semibold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent truncate">
                 SchoolXNow
               </h1>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <NotificationCenter />
             </div>
           </header>
           <main className="flex flex-1 flex-col gap-3 md:gap-4 p-3 md:p-4 lg:p-6 bg-background min-h-[calc(100vh-3.5rem)] md:min-h-[calc(100vh-4rem)] overflow-x-hidden">
