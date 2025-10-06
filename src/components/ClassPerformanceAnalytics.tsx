@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,6 +50,7 @@ interface ClassPerformanceProps {
 export function ClassPerformanceAnalytics({ classId, subjectId, dateRange }: ClassPerformanceProps) {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
     attendanceRate: 0,
     attendanceTrend: 'stable',
@@ -63,13 +64,7 @@ export function ClassPerformanceAnalytics({ classId, subjectId, dateRange }: Cla
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceData[]>([]);
   const [gradeDistribution, setGradeDistribution] = useState<GradeDistribution[]>([]);
 
-  useEffect(() => {
-    if (profile?.school_id) {
-      fetchAnalytics();
-    }
-  }, [profile?.school_id, classId, subjectId, dateRange]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     if (!profile?.school_id) return;
 
     try {
@@ -254,13 +249,21 @@ export function ClassPerformanceAnalytics({ classId, subjectId, dateRange }: Cla
 
       setAttendanceHistory(attendanceHistory);
       setGradeDistribution(gradeDistribution);
+      setError(null);
 
     } catch (error) {
       console.error('Error fetching analytics:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch analytics data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile?.school_id, profile?.role, profile?.user_id, classId, subjectId, dateRange]);
+
+  useEffect(() => {
+    if (profile?.school_id) {
+      fetchAnalytics();
+    }
+  }, [profile?.school_id, fetchAnalytics]);
 
   const getTrendIcon = (trend: 'up' | 'down' | 'stable') => {
     if (trend === 'up') return <TrendingUp className="h-4 w-4 text-green-500" />;
@@ -285,6 +288,41 @@ export function ClassPerformanceAnalytics({ classId, subjectId, dateRange }: Cla
           </Card>
         ))}
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-500/50 bg-red-500/5">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3 text-red-600">
+            <AlertCircle className="h-5 w-5" />
+            <div>
+              <p className="font-semibold">Error Loading Analytics</p>
+              <p className="text-sm text-red-600/80">{error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show empty state if no students
+  if (metrics.totalStudents === 0) {
+    return (
+      <Card className="border-muted">
+        <CardContent className="p-8">
+          <div className="text-center space-y-2">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-lg font-semibold text-foreground">No Student Data</p>
+            <p className="text-sm text-muted-foreground">
+              {profile?.role === 'teacher' 
+                ? 'No students found in your assigned classes. Please check your timetable assignments.'
+                : 'No students found. Add students to see performance analytics.'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -530,7 +568,7 @@ export function ClassPerformanceAnalytics({ classId, subjectId, dateRange }: Cla
             </div>
             <div className="p-4 bg-card rounded-lg border border-border/50">
               <div className="text-2xl font-bold text-blue-600 mb-1">
-                {metrics.activeStudents - metrics.atRiskStudents - metrics.topPerformers}
+                {Math.max(0, metrics.activeStudents - metrics.atRiskStudents - metrics.topPerformers)}
               </div>
               <div className="text-sm text-muted-foreground">
                 Average Performers (50-79%)
