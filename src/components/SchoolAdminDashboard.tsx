@@ -259,14 +259,14 @@ const SchoolAdminDashboard = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button className="bg-primary hover:bg-primary/90 shadow-sm">
+            {/* <Button className="bg-primary hover:bg-primary/90 shadow-sm">
               <UserPlus className="mr-2 h-4 w-4" />
               Add Student
             </Button>
             <Button variant="outline" className="border-primary/20 hover:bg-primary/5">
               <Settings className="mr-2 h-4 w-4" />
               Settings
-            </Button>
+            </Button> */}
           </div>
         </div>
       </div>

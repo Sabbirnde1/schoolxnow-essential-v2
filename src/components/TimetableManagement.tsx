@@ -81,7 +81,7 @@ export function TimetableManagement() {
 
   useEffect(() => {
     fetchData();
-  }, [profile?.school_id]);
+  }, [profile?.school_id, profile?.role]);
 
   const fetchData = async () => {
     if (!profile?.school_id) return;
@@ -89,11 +89,33 @@ export function TimetableManagement() {
     try {
       setLoading(true);
 
-      // Fetch timetable entries without joins (using raw query since types aren't generated yet)
-      const { data: timetableData, error: timetableError } = await supabase
+      // For teachers, get their teacher record first
+      let teacherRecord = null;
+      if (profile?.role === 'teacher') {
+        const { data: teacherData, error: teacherError } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('user_id', profile.user_id)
+          .single();
+
+        if (teacherError && teacherError.code !== 'PGRST116') {
+          throw teacherError;
+        }
+        teacherRecord = teacherData;
+      }
+
+      // Fetch timetable entries - filter by teacher if teacher role
+      let timetableQuery = supabase
         .from('timetable' as any)
         .select('*')
-        .eq('school_id', profile.school_id)
+        .eq('school_id', profile.school_id);
+
+      // Role-based filtering: Teachers only see their own schedule
+      if (profile?.role === 'teacher' && teacherRecord) {
+        timetableQuery = timetableQuery.eq('teacher_id', teacherRecord.id);
+      }
+
+      const { data: timetableData, error: timetableError } = await timetableQuery
         .order('day_of_week')
         .order('time_slot');
 
@@ -337,24 +359,26 @@ export function TimetableManagement() {
                             <div className="space-y-1">
                               <div className="font-medium text-xs truncate text-foreground">{entry.subject_name}</div>
                               <div className="text-[9px] text-muted-foreground truncate">{entry.class_name?.split(' - ')[0]}</div>
-                              <div className="flex gap-1 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-5 w-5 p-0 touch-target-sm"
-                                  onClick={() => handleEdit(entry)}
-                                >
-                                  <Edit2 className="h-2.5 w-2.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-5 w-5 p-0 touch-target-sm"
-                                  onClick={() => handleDelete(entry.id)}
-                                >
-                                  <Trash2 className="h-2.5 w-2.5" />
-                                </Button>
-                              </div>
+                              {profile?.role !== 'teacher' && (
+                                <div className="flex gap-1 justify-center">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-5 w-5 p-0 touch-target-sm"
+                                    onClick={() => handleEdit(entry)}
+                                  >
+                                    <Edit2 className="h-2.5 w-2.5" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-5 w-5 p-0 touch-target-sm"
+                                    onClick={() => handleDelete(entry.id)}
+                                  >
+                                    <Trash2 className="h-2.5 w-2.5" />
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -425,24 +449,26 @@ export function TimetableManagement() {
                                       {entry.room_number}
                                     </div>
                                   )}
-                                  <div className="flex gap-1 mt-1 lg:mt-2 justify-center">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-primary/10 rounded-full"
-                                      onClick={() => handleEdit(entry)}
-                                    >
-                                      <Edit2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-destructive/10 rounded-full"
-                                      onClick={() => handleDelete(entry.id)}
-                                    >
-                                      <Trash2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
-                                    </Button>
-                                  </div>
+                                  {profile?.role !== 'teacher' && (
+                                    <div className="flex gap-1 mt-1 lg:mt-2 justify-center">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-primary/10 rounded-full"
+                                        onClick={() => handleEdit(entry)}
+                                      >
+                                        <Edit2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 w-5 lg:h-6 lg:w-6 p-0 touch-target-sm hover:bg-destructive/10 rounded-full"
+                                        onClick={() => handleDelete(entry.id)}
+                                      >
+                                        <Trash2 className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               </CardContent>
                             </Card>
@@ -512,26 +538,28 @@ export function TimetableManagement() {
                       </div>
                     </div>
                     
-                    <div className="flex gap-2 self-start sm:self-center flex-shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(entry)}
-                        className="touch-target h-8 px-3 hover:bg-primary/10 hover:text-primary border-primary/20"
-                      >
-                        <Edit2 className="h-3 w-3 lg:h-4 lg:w-4" />
-                        <span className="hidden sm:inline ml-1.5">Edit</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(entry.id)}
-                        className="touch-target h-8 px-3 hover:bg-destructive/10 hover:text-destructive border-destructive/20"
-                      >
-                        <Trash2 className="h-3 w-3 lg:h-4 lg:w-4" />
-                        <span className="hidden sm:inline ml-1.5">Delete</span>
-                      </Button>
-                    </div>
+                    {profile?.role !== 'teacher' && (
+                      <div className="flex gap-2 self-start sm:self-center flex-shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(entry)}
+                          className="touch-target h-8 px-3 hover:bg-primary/10 hover:text-primary border-primary/20"
+                        >
+                          <Edit2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                          <span className="hidden sm:inline ml-1.5">Edit</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(entry.id)}
+                          className="touch-target h-8 px-3 hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                        >
+                          <Trash2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                          <span className="hidden sm:inline ml-1.5">Delete</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -554,30 +582,73 @@ export function TimetableManagement() {
     <div className="space-y-3 lg:space-y-6 p-3 lg:p-6">
       <div className="flex flex-col gap-3 lg:gap-4">
         <div>
-          <h1 className="text-xl lg:text-3xl font-bold text-foreground">Timetable Management</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage class schedules and timetables</p>
+          <div className="flex items-center gap-2 mb-2">
+            <h1 className="text-xl lg:text-3xl font-bold text-foreground">
+              {profile?.role === 'teacher' ? 'My Schedule' : 'Timetable Management'}
+            </h1>
+            {profile?.role === 'teacher' && (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                Personal View
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {profile?.role === 'teacher' 
+              ? 'View your teaching schedule and class assignments'
+              : 'Manage class schedules and timetables with intelligent conflict detection'}
+          </p>
+          
+          {/* Quick Stats for Teacher */}
+          {profile?.role === 'teacher' && timetableEntries.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground">Total Classes</div>
+                <div className="text-lg font-bold text-primary">{timetableEntries.length}</div>
+              </div>
+              <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground">Unique Subjects</div>
+                <div className="text-lg font-bold text-green-600">
+                  {new Set(timetableEntries.map(e => e.subject_id)).size}
+                </div>
+              </div>
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground">Classes</div>
+                <div className="text-lg font-bold text-blue-600">
+                  {new Set(timetableEntries.map(e => e.class_id)).size}
+                </div>
+              </div>
+              <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2">
+                <div className="text-xs text-muted-foreground">Days Active</div>
+                <div className="text-lg font-bold text-orange-600">
+                  {new Set(timetableEntries.map(e => e.day_of_week)).size}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              className="w-full sm:w-auto touch-target bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
-              onClick={() => {
-                setEditingEntry(null);
-                setFormData({
-                  day_of_week: '',
-                  time_slot: '',
-                  class_id: '',
-                  subject_id: '',
-                  teacher_id: '',
-                  room_number: ''
-                });
-                setConflicts([]);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Schedule
-            </Button>
-          </DialogTrigger>
+        {/* Only admins can add/edit timetable */}
+        {profile?.role !== 'teacher' && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                className="w-full sm:w-auto touch-target bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
+                onClick={() => {
+                  setEditingEntry(null);
+                  setFormData({
+                    day_of_week: '',
+                    time_slot: '',
+                    class_id: '',
+                    subject_id: '',
+                    teacher_id: '',
+                    room_number: ''
+                  });
+                  setConflicts([]);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Schedule
+              </Button>
+            </DialogTrigger>
           <DialogContent className="w-[95vw] max-w-lg mx-3 lg:mx-0 max-h-[90vh] overflow-y-auto rounded-xl">
             <DialogHeader className="space-y-2">
               <DialogTitle className="text-lg lg:text-xl font-semibold">
@@ -652,10 +723,30 @@ export function TimetableManagement() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="subject_id" className="text-sm font-medium">Subject</Label>
+                <Label htmlFor="subject_id" className="text-sm font-medium">
+                  Subject
+                  {formData.class_id && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Filtered by class level)
+                    </span>
+                  )}
+                </Label>
                 <Select
                   value={formData.subject_id}
-                  onValueChange={(value) => setFormData({ ...formData, subject_id: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, subject_id: value });
+                    // Auto-suggest teacher based on subject specialization
+                    const selectedSubject = subjects.find(s => s.id === value);
+                    if (selectedSubject && !formData.teacher_id) {
+                      const matchingTeacher = teachers.find(t => 
+                        t.subject_specialization?.toLowerCase().includes(selectedSubject.name.toLowerCase())
+                      );
+                      if (matchingTeacher) {
+                        setFormData(prev => ({ ...prev, teacher_id: matchingTeacher.id }));
+                        toast.success(`Auto-assigned ${matchingTeacher.full_name} based on specialization`);
+                      }
+                    }
+                  }}
                 >
                   <SelectTrigger className="touch-target h-10">
                     <SelectValue placeholder="Select subject" />
@@ -666,17 +757,42 @@ export function TimetableManagement() {
                         const selectedClass = classes.find(c => c.id === formData.class_id);
                         return !selectedClass || subject.class_level === selectedClass.class_level;
                       })
-                      .map(subject => (
-                        <SelectItem key={subject.id} value={subject.id} className="text-sm py-2.5">
-                          {subject.name} ({subject.code})
-                        </SelectItem>
-                      ))}
+                      .map(subject => {
+                        const selectedClass = classes.find(c => c.id === formData.class_id);
+                        return (
+                          <SelectItem key={subject.id} value={subject.id} className="text-sm py-2.5">
+                            <div className="flex items-center justify-between w-full">
+                              <span>{subject.name} ({subject.code})</span>
+                              {selectedClass && subject.class_level === selectedClass.class_level && (
+                                <Badge variant="outline" className="ml-2 bg-green-500/10 text-green-600 border-green-500/20 text-xs">
+                                  Match
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    {subjects.filter(subject => {
+                      const selectedClass = classes.find(c => c.id === formData.class_id);
+                      return !selectedClass || subject.class_level === selectedClass.class_level;
+                    }).length === 0 && (
+                      <div className="p-2 text-xs text-muted-foreground text-center">
+                        No subjects available for selected class
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="teacher_id" className="text-sm font-medium">Teacher</Label>
+                <Label htmlFor="teacher_id" className="text-sm font-medium">
+                  Teacher
+                  {formData.subject_id && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Specialists highlighted)
+                    </span>
+                  )}
+                </Label>
                 <Select
                   value={formData.teacher_id}
                   onValueChange={(value) => {
@@ -688,18 +804,52 @@ export function TimetableManagement() {
                     <SelectValue placeholder="Select teacher" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
-                    {teachers.map(teacher => (
-                      <SelectItem key={teacher.id} value={teacher.id} className="text-sm py-2.5">
-                        <div className="flex flex-col items-start">
-                          <span>{teacher.full_name}</span>
-                          {teacher.subject_specialization && (
-                            <span className="text-xs text-muted-foreground">
-                              ({teacher.subject_specialization})
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {teachers.map(teacher => {
+                      const selectedSubject = subjects.find(s => s.id === formData.subject_id);
+                      const isSpecialist = selectedSubject && teacher.subject_specialization?.toLowerCase().includes(selectedSubject.name.toLowerCase());
+                      
+                      // Check if teacher has conflict at this time
+                      const hasConflict = formData.day_of_week && formData.time_slot && timetableEntries.find(entry => 
+                        entry.teacher_id === teacher.id &&
+                        entry.day_of_week === formData.day_of_week &&
+                        entry.time_slot === formData.time_slot &&
+                        (!editingEntry || entry.id !== editingEntry.id)
+                      );
+                      
+                      return (
+                        <SelectItem 
+                          key={teacher.id} 
+                          value={teacher.id} 
+                          className="text-sm py-2.5"
+                          disabled={!!hasConflict}
+                        >
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <div className="flex flex-col items-start">
+                              <span className={hasConflict ? 'text-muted-foreground' : ''}>
+                                {teacher.full_name}
+                              </span>
+                              {teacher.subject_specialization && (
+                                <span className="text-xs text-muted-foreground">
+                                  {teacher.subject_specialization}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              {isSpecialist && (
+                                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-xs">
+                                  Specialist
+                                </Badge>
+                              )}
+                              {hasConflict && (
+                                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-xs">
+                                  Busy
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -752,6 +902,7 @@ export function TimetableManagement() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Tabs value={selectedView} onValueChange={(value) => setSelectedView(value as any)}>
