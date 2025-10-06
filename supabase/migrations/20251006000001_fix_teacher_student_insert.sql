@@ -8,6 +8,14 @@ DROP POLICY IF EXISTS "Students select policy" ON students;
 DROP POLICY IF EXISTS "Students insert policy" ON students;
 DROP POLICY IF EXISTS "Students update policy" ON students;
 DROP POLICY IF EXISTS "Students delete policy" ON students;
+DROP POLICY IF EXISTS "Teachers and admins can view students" ON students;
+DROP POLICY IF EXISTS "Teachers and admins can insert students" ON students;
+DROP POLICY IF EXISTS "Teachers and admins can update students" ON students;
+DROP POLICY IF EXISTS "School admins can delete students" ON students;
+DROP POLICY IF EXISTS "Super admins can view all students" ON students;
+DROP POLICY IF EXISTS "Super admins can insert students" ON students;
+DROP POLICY IF EXISTS "Super admins can update students" ON students;
+DROP POLICY IF EXISTS "Super admins can delete students" ON students;
 
 -- Create new comprehensive policies for students table
 
@@ -17,9 +25,10 @@ ON students FOR SELECT
 TO authenticated
 USING (
   EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.school_id = students.school_id
+    SELECT 1 FROM user_profiles up
+    JOIN user_roles ur ON ur.user_id = up.user_id
+    WHERE up.user_id = auth.uid()
+    AND up.school_id = students.school_id
     AND ur.role IN ('teacher', 'school_admin')
   )
 );
@@ -30,9 +39,10 @@ ON students FOR INSERT
 TO authenticated
 WITH CHECK (
   EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.school_id = students.school_id
+    SELECT 1 FROM user_profiles up
+    JOIN user_roles ur ON ur.user_id = up.user_id
+    WHERE up.user_id = auth.uid()
+    AND up.school_id = students.school_id
     AND ur.role IN ('teacher', 'school_admin')
   )
 );
@@ -43,17 +53,19 @@ ON students FOR UPDATE
 TO authenticated
 USING (
   EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.school_id = students.school_id
+    SELECT 1 FROM user_profiles up
+    JOIN user_roles ur ON ur.user_id = up.user_id
+    WHERE up.user_id = auth.uid()
+    AND up.school_id = students.school_id
     AND ur.role IN ('teacher', 'school_admin')
   )
 )
 WITH CHECK (
   EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.school_id = students.school_id
+    SELECT 1 FROM user_profiles up
+    JOIN user_roles ur ON ur.user_id = up.user_id
+    WHERE up.user_id = auth.uid()
+    AND up.school_id = students.school_id
     AND ur.role IN ('teacher', 'school_admin')
   )
 );
@@ -64,9 +76,10 @@ ON students FOR DELETE
 TO authenticated
 USING (
   EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.school_id = students.school_id
+    SELECT 1 FROM user_profiles up
+    JOIN user_roles ur ON ur.user_id = up.user_id
+    WHERE up.user_id = auth.uid()
+    AND up.school_id = students.school_id
     AND ur.role = 'school_admin'
   )
 );
