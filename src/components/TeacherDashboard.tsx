@@ -193,6 +193,8 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
   const [teacherInfo, setTeacherInfo] = useState<any>(null);
   const [schoolInfo, setSchoolInfo] = useState<any>(null);
   const [todayClasses, setTodayClasses] = useState<any[]>([]);
+  const [recentStudents, setRecentStudents] = useState<any[]>([]);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   
@@ -513,6 +515,35 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
 
       setTodayClasses(todaySchedule);
 
+      // Fetch recent students (from teacher's classes, ordered by admission date)
+      if (uniqueClassIds.length > 0) {
+        const { data: students, error: studentsError } = await supabase
+          .from('students')
+          .select('id, full_name, student_id, class_id, admission_date, status, classes(name, section)')
+          .in('class_id', uniqueClassIds)
+          .eq('status', 'active')
+          .order('admission_date', { ascending: false })
+          .limit(5);
+
+        if (!studentsError && students) {
+          setRecentStudents(students);
+        }
+      }
+
+      // Fetch upcoming exams as deadlines
+      const { data: upcomingExams, error: examsError } = await supabase
+        .from('exams')
+        .select('id, name, exam_date, class_level')
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true)
+        .gte('exam_date', new Date().toISOString().split('T')[0])
+        .order('exam_date', { ascending: true })
+        .limit(3);
+
+      if (!examsError && upcomingExams) {
+        setUpcomingDeadlines(upcomingExams);
+      }
+
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -746,6 +777,88 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
         </Card>
       </div>
 
+      {/* Today's Tasks Overview */}
+      <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-orange-500/5 via-card to-orange-500/3">
+        <CardHeader className="border-b border-border/50 bg-gradient-to-r from-orange-500/5 to-orange-500/10 p-3 md:p-6">
+          <CardTitle className="flex items-center gap-2 md:gap-3 text-sm md:text-lg">
+            <div className="p-1.5 md:p-2 bg-orange-500/10 rounded-full">
+              <CheckCircle className="h-3.5 w-3.5 md:h-5 md:w-5 text-orange-500" />
+            </div>
+            <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+              Today's Tasks
+            </span>
+            <Badge variant="secondary" className="ml-auto bg-orange-500/10 text-orange-600">
+              {stats.pendingTasks} pending
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 md:p-6">
+          <div className="space-y-3">
+            {/* Pending Attendance */}
+            {stats.pendingTasks > 0 && (
+              <div className="flex items-center gap-3 p-3 bg-orange-500/5 border border-orange-500/20 rounded-lg hover:bg-orange-500/10 transition-colors cursor-pointer"
+                onClick={() => setActiveModule?.('attendance')}>
+                <div className="p-2 bg-orange-500/10 rounded-lg">
+                  <AlertCircle className="h-5 w-5 text-orange-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">Attendance Pending</p>
+                  <p className="text-xs text-muted-foreground">{stats.pendingTasks} class{stats.pendingTasks > 1 ? 'es' : ''} need attendance marked</p>
+                </div>
+                <Button size="sm" variant="ghost" className="text-orange-500 hover:bg-orange-500/10">
+                  Mark Now
+                </Button>
+              </div>
+            )}
+            
+            {/* Today's Classes Summary */}
+            <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer"
+              onClick={() => {
+                const upcomingClass = todayClasses.find(c => c.status === 'upcoming' || c.status === 'current');
+                if (upcomingClass) {
+                  openQuickAttendance(upcomingClass);
+                }
+              }}>
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Today's Classes</p>
+                <p className="text-xs text-muted-foreground">
+                  {todayClasses.filter(c => c.status === 'current').length > 0 
+                    ? `${todayClasses.filter(c => c.status === 'current')[0].subject} is happening now`
+                    : todayClasses.filter(c => c.status === 'upcoming').length > 0
+                    ? `Next: ${todayClasses.filter(c => c.status === 'upcoming')[0].subject} at ${todayClasses.filter(c => c.status === 'upcoming')[0].time.split('-')[0]}`
+                    : `${todayClasses.length} classes completed`}
+                </p>
+              </div>
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                {todayClasses.length}
+              </Badge>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-3 bg-green-500/5 border border-green-500/20 rounded-lg text-center">
+                <CheckCircle className="h-4 w-4 text-green-500 mx-auto mb-1" />
+                <p className="text-lg font-bold text-green-600">{todayClasses.filter(c => c.status === 'completed').length}</p>
+                <p className="text-xs text-muted-foreground">Completed</p>
+              </div>
+              <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-center">
+                <Clock className="h-4 w-4 text-blue-500 mx-auto mb-1" />
+                <p className="text-lg font-bold text-blue-600">{todayClasses.filter(c => c.status === 'current').length}</p>
+                <p className="text-xs text-muted-foreground">In Progress</p>
+              </div>
+              <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg text-center">
+                <Activity className="h-4 w-4 text-purple-500 mx-auto mb-1" />
+                <p className="text-lg font-bold text-purple-600">{todayClasses.filter(c => c.status === 'upcoming').length}</p>
+                <p className="text-xs text-muted-foreground">Upcoming</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
         {/* Today's Schedule */}
         <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-primary/5">
@@ -797,20 +910,113 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-accent/5">
-          <CardHeader className="border-b border-border/50 bg-gradient-to-r from-accent/5 to-primary/5 p-3 md:p-6">
-            <CardTitle className="flex items-center gap-2 md:gap-3 text-sm md:text-lg">
-              <div className="p-1.5 md:p-2 bg-accent/10 rounded-full">
-                <Zap className="h-3.5 w-3.5 md:h-5 md:w-5 text-accent" />
-              </div>
-              <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
-                Quick Actions
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6">
-            <div className="grid grid-cols-2 gap-2.5 md:gap-4">
+        {/* Recent Students & Quick Actions Combined */}
+        <div className="space-y-4 md:space-y-6">
+          {/* Recent Students */}
+          {recentStudents.length > 0 && (
+            <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-blue-500/5">
+              <CardHeader className="border-b border-border/50 bg-gradient-to-r from-blue-500/5 to-blue-500/10 p-3 md:p-4">
+                <CardTitle className="flex items-center gap-2 text-sm md:text-base">
+                  <div className="p-1.5 bg-blue-500/10 rounded-full">
+                    <Users className="h-3.5 w-3.5 md:h-4 md:w-4 text-blue-500" />
+                  </div>
+                  <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+                    Recent Students
+                  </span>
+                  <Badge variant="secondary" className="ml-auto bg-blue-500/10 text-blue-600 text-xs">
+                    {recentStudents.length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 md:p-4">
+                <div className="space-y-2">
+                  {recentStudents.map((student: any) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center gap-3 p-2 md:p-3 bg-muted/30 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer border border-border/50"
+                      onClick={() => setActiveModule?.('students')}
+                    >
+                      <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                        {student.full_name?.charAt(0) || 'S'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs md:text-sm font-semibold text-foreground truncate">
+                          {student.full_name}
+                        </p>
+                        <p className="text-[10px] md:text-xs text-muted-foreground">
+                          {student.classes?.name} {student.classes?.section} • ID: {student.student_id}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] md:text-xs">
+                        Active
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Upcoming Deadlines */}
+          {upcomingDeadlines.length > 0 && (
+            <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-red-500/5">
+              <CardHeader className="border-b border-border/50 bg-gradient-to-r from-red-500/5 to-red-500/10 p-3 md:p-4">
+                <CardTitle className="flex items-center gap-2 text-sm md:text-base">
+                  <div className="p-1.5 bg-red-500/10 rounded-full">
+                    <Clock className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-500" />
+                  </div>
+                  <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+                    Upcoming Exams
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 md:p-4">
+                <div className="space-y-2">
+                  {upcomingDeadlines.map((exam: any) => (
+                    <div
+                      key={exam.id}
+                      className="flex items-center gap-3 p-2 md:p-3 bg-red-500/5 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer border border-red-500/20"
+                      onClick={() => setActiveModule?.('exams')}
+                    >
+                      <div className="p-2 bg-red-500/10 rounded-lg">
+                        <FileText className="h-4 w-4 text-red-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs md:text-sm font-semibold text-foreground truncate">
+                          {exam.name}
+                        </p>
+                        <p className="text-[10px] md:text-xs text-muted-foreground">
+                          {new Date(exam.exam_date).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px] md:text-xs">
+                        {Math.ceil((new Date(exam.exam_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick Actions */}
+          <Card className="border-0 shadow-soft hover:shadow-elegant transition-all duration-300 bg-gradient-to-br from-card via-card/95 to-accent/5">
+            <CardHeader className="border-b border-border/50 bg-gradient-to-r from-accent/5 to-primary/5 p-3 md:p-6">
+              <CardTitle className="flex items-center gap-2 md:gap-3 text-sm md:text-lg">
+                <div className="p-1.5 md:p-2 bg-accent/10 rounded-full">
+                  <Zap className="h-3.5 w-3.5 md:h-5 md:w-5 text-accent" />
+                </div>
+                <span className="bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+                  Quick Actions
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 md:p-6">
+              <div className="grid grid-cols-2 gap-2.5 md:gap-4">
               <Button 
                 variant="outline" 
                 className="group h-auto p-3 md:p-5 flex flex-col items-center gap-1.5 md:gap-3 touch-target hover:bg-primary/5 hover:border-primary/30 border-border/50 bg-gradient-to-br from-card to-primary/5 shadow-soft hover:shadow-elegant transition-all duration-300"
@@ -874,6 +1080,7 @@ const TeacherDashboard = ({ setActiveModule }: TeacherDashboardProps) => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Teacher Profile */}
