@@ -12,8 +12,9 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { AdvancedFilter, FilterField, FilterValue } from "@/components/AdvancedFilter";
+import { useAdvancedFilter } from "@/hooks/useAdvancedFilter";
 import { 
-  Search, 
   Plus, 
   Edit, 
   Trash2,
@@ -54,10 +55,24 @@ export function SubjectManagement() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedClassLevel, setSelectedClassLevel] = useState("all");
+  const [advancedFilters, setAdvancedFilters] = useState<FilterValue[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+
+  const filterFields: FilterField[] = [
+    { key: 'name', label: 'Subject Name', type: 'text', placeholder: 'Enter name...' },
+    { key: 'code', label: 'Subject Code', type: 'text', placeholder: 'Enter code...' },
+    { key: 'class_level', label: 'Class Level', type: 'select', options: CLASS_LEVELS },
+    { key: 'is_optional', label: 'Type', type: 'select', options: [
+      { value: 'true', label: 'Optional' },
+      { value: 'false', label: 'Compulsory' }
+    ]},
+    { key: 'is_active', label: 'Status', type: 'select', options: [
+      { value: 'true', label: 'Active' },
+      { value: 'false', label: 'Inactive' }
+    ]},
+  ];
 
   const form = useForm<{
     name: string;
@@ -223,12 +238,23 @@ export function SubjectManagement() {
     }
   };
 
-  const filteredSubjects = subjects.filter(subject => {
-    const matchesSearch = subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         subject.code.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesClass = selectedClassLevel === "all" || subject.class_level === selectedClassLevel;
-    return matchesSearch && matchesClass;
-  });
+  const subjectsWithStringBooleans = subjects.map(s => ({
+    ...s,
+    is_active_string: String(s.is_active),
+    is_optional_string: String(s.is_optional)
+  }));
+
+  const filteredSubjectsWithMeta = useAdvancedFilter(
+    subjectsWithStringBooleans,
+    advancedFilters.map(f => 
+      f.field === 'is_active' ? { ...f, field: 'is_active_string' } :
+      f.field === 'is_optional' ? { ...f, field: 'is_optional_string' } : f
+    ),
+    searchTerm,
+    ['name', 'code', 'class_level']
+  );
+
+  const filteredSubjects = filteredSubjectsWithMeta.map(s => subjects.find(orig => orig.id === s.id)!).filter(Boolean);
 
   const openEditDialog = (subject: Subject) => {
     setEditingSubject(subject);
@@ -347,30 +373,12 @@ export function SubjectManagement() {
       {/* Search and Filters */}
       <Card className="shadow-soft">
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search subjects by name or code..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={selectedClassLevel} onValueChange={setSelectedClassLevel}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="All Class Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Class Levels</SelectItem>
-                {CLASS_LEVELS.map((level) => (
-                  <SelectItem key={level.value} value={level.value}>
-                    {level.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <AdvancedFilter
+            fields={filterFields}
+            onFilterChange={setAdvancedFilters}
+            onSearch={setSearchTerm}
+            searchPlaceholder="Search subjects by name, code, or class level..."
+          />
         </CardContent>
       </Card>
 

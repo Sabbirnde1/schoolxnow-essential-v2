@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Edit, Users, Eye, CheckCircle, XCircle, UserX, UserPlus } from 'lucide-react';
+import { AdvancedFilter, FilterField, FilterValue } from '@/components/AdvancedFilter';
+import { useAdvancedFilter } from '@/hooks/useAdvancedFilter';
+import { Edit, Users, Eye, CheckCircle, XCircle, UserX, UserPlus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 interface Teacher {
@@ -32,7 +34,7 @@ const TeacherManagement = () => {
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [advancedFilters, setAdvancedFilters] = useState<FilterValue[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -53,6 +55,21 @@ const TeacherManagement = () => {
     subject_specialization: '',
     designation: '',
   });
+
+  const filterFields: FilterField[] = [
+    { key: 'full_name', label: 'Teacher Name', type: 'text', placeholder: 'Enter name...' },
+    { key: 'phone', label: 'Phone', type: 'text', placeholder: 'Enter phone...' },
+    { key: 'approval_status', label: 'Status', type: 'select', options: [
+      { value: 'pending', label: 'Pending' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'rejected', label: 'Rejected' }
+    ]},
+    { key: 'is_active', label: 'Active', type: 'select', options: [
+      { value: 'true', label: 'Active' },
+      { value: 'false', label: 'Inactive' }
+    ]},
+    { key: 'school_name', label: 'School', type: 'text', placeholder: 'Enter school name...' },
+  ];
 
   useEffect(() => {
     fetchTeachers();
@@ -402,13 +419,21 @@ const TeacherManagement = () => {
     }
   };
 
-  const filteredTeachers = teachers.filter(teacher => {
-    const matchesSearch = teacher.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         teacher.schools?.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || teacher.approval_status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const teachersWithSchoolName = teachers.map(t => ({
+    ...t,
+    school_name: t.schools?.name || '',
+    is_active_string: String(t.is_active)
+  }));
+
+  const filteredTeachersWithMeta = useAdvancedFilter(
+    teachersWithSchoolName,
+    advancedFilters.map(f => f.field === 'is_active' ? { ...f, field: 'is_active_string' } : f),
+    searchTerm,
+    ['full_name', 'phone', 'school_name']
+  );
+
+  // Map back to original teacher objects
+  const filteredTeachers = filteredTeachersWithMeta.map(t => teachers.find(orig => orig.id === t.id)!).filter(Boolean);
 
   if (loading) {
     return (
@@ -443,27 +468,13 @@ const TeacherManagement = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center space-x-2 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search teachers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="mb-6">
+            <AdvancedFilter
+              fields={filterFields}
+              onFilterChange={setAdvancedFilters}
+              onSearch={setSearchTerm}
+              searchPlaceholder="Search teachers by name, phone, or school..."
+            />
           </div>
 
           <div className="rounded-md border">

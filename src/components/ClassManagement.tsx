@@ -10,8 +10,9 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { AdvancedFilter, FilterField, FilterValue } from "@/components/AdvancedFilter";
+import { useAdvancedFilter } from "@/hooks/useAdvancedFilter";
 import { 
-  Search, 
   Plus, 
   Edit, 
   Trash2,
@@ -54,8 +55,20 @@ export function ClassManagement() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [advancedFilters, setAdvancedFilters] = useState<FilterValue[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
+
+  const filterFields: FilterField[] = [
+    { key: 'name', label: 'Class Name', type: 'text', placeholder: 'Enter class name...' },
+    { key: 'section', label: 'Section', type: 'text', placeholder: 'Enter section...' },
+    { key: 'class_level', label: 'Class Level', type: 'select', options: CLASS_LEVELS },
+    { key: 'capacity', label: 'Capacity', type: 'number', placeholder: 'Enter capacity...' },
+    { key: 'is_active', label: 'Status', type: 'select', options: [
+      { value: 'true', label: 'Active' },
+      { value: 'false', label: 'Inactive' }
+    ]},
+  ];
 
   const isAdmin = profile?.role === 'school_admin' || profile?.role === 'super_admin';
 
@@ -239,10 +252,19 @@ export function ClassManagement() {
     }
   };
 
-  const filteredClasses = classes.filter(classItem =>
-    classItem.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    classItem.section.toLowerCase().includes(searchTerm.toLowerCase())
+  const classesWithStringBooleans = classes.map(c => ({
+    ...c,
+    is_active_string: String(c.is_active)
+  }));
+
+  const filteredClassesWithMeta = useAdvancedFilter(
+    classesWithStringBooleans,
+    advancedFilters.map(f => f.field === 'is_active' ? { ...f, field: 'is_active_string' } : f),
+    searchTerm,
+    ['name', 'section', 'class_level']
   );
+
+  const filteredClasses = filteredClassesWithMeta.map(c => classes.find(orig => orig.id === c.id)!).filter(Boolean);
 
   const openEditDialog = (classItem: Class) => {
     if (!isAdmin) {
@@ -342,15 +364,12 @@ export function ClassManagement() {
       {/* Search */}
       <Card className="shadow-soft">
         <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search classes by name or section..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+          <AdvancedFilter
+            fields={filterFields}
+            onFilterChange={setAdvancedFilters}
+            onSearch={setSearchTerm}
+            searchPlaceholder="Search classes by name, section, or level..."
+          />
         </CardContent>
       </Card>
 

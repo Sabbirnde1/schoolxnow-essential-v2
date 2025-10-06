@@ -12,10 +12,10 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { AdvancedFilter, FilterField, FilterValue } from "@/components/AdvancedFilter";
+import { useAdvancedFilter } from "@/hooks/useAdvancedFilter";
 import { 
-  Search, 
   Plus, 
-  Filter, 
   Download, 
   Eye, 
   Edit, 
@@ -58,9 +58,28 @@ export function StudentManagement() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedClass, setSelectedClass] = useState("all");
+  const [advancedFilters, setAdvancedFilters] = useState<FilterValue[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  const filterFields: FilterField[] = [
+    { key: 'full_name', label: 'Student Name', type: 'text', placeholder: 'Enter name...' },
+    { key: 'student_id', label: 'Student ID', type: 'text', placeholder: 'Enter ID...' },
+    { key: 'gender', label: 'Gender', type: 'select', options: [
+      { value: 'male', label: 'Male' },
+      { value: 'female', label: 'Female' },
+      { value: 'other', label: 'Other' }
+    ]},
+    { key: 'status', label: 'Status', type: 'select', options: [
+      { value: 'active', label: 'Active' },
+      { value: 'inactive', label: 'Inactive' },
+      { value: 'transferred', label: 'Transferred' },
+      { value: 'graduated', label: 'Graduated' }
+    ]},
+    { key: 'class_name', label: 'Class', type: 'text', placeholder: 'Enter class...' },
+    { key: 'guardian_phone', label: 'Guardian Phone', type: 'text', placeholder: 'Enter phone...' },
+    { key: 'admission_date', label: 'Admission Date', type: 'date' },
+  ];
 
   const studentSchema = z.object({
     full_name: z.string().min(1, "Full name is required"),
@@ -348,12 +367,18 @@ export function StudentManagement() {
     }
   };
 
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.student_id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesClass = selectedClass === "all" || student.class_id === selectedClass;
-    return matchesSearch && matchesClass;
-  });
+  // Add class_name for filtering
+  const studentsWithClassName = students.map(s => ({
+    ...s,
+    class_name: s.classes ? `${s.classes.name} ${s.classes.section}` : ''
+  }));
+
+  const filteredStudents = useAdvancedFilter(
+    studentsWithClassName,
+    advancedFilters,
+    searchTerm,
+    ['full_name', 'student_id', 'guardian_phone', 'guardian_email']
+  );
 
   const openEditDialog = (student: Student) => {
     setEditingStudent(student);
@@ -466,41 +491,19 @@ export function StudentManagement() {
       {/* Search and Filters */}
       <Card className="shadow-soft">
         <CardContent className="p-3 md:p-4">
-          <div className="flex flex-col gap-3 md:gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search students..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 h-10 md:h-auto"
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 items-start sm:items-center">
+            <div className="flex-1 w-full">
+              <AdvancedFilter
+                fields={filterFields}
+                onFilterChange={setAdvancedFilters}
+                onSearch={setSearchTerm}
+                searchPlaceholder="Search students by name, ID, phone, or email..."
               />
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger className="w-full sm:w-[200px] h-10">
-                  <SelectValue placeholder="All Classes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Classes</SelectItem>
-                  {classes.map((classItem) => (
-                    <SelectItem key={classItem.id} value={classItem.id}>
-                      {classItem.name} - {classItem.section}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 sm:flex-none touch-target">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filter
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1 sm:flex-none touch-target">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
-              </div>
-            </div>
+            <Button variant="outline" size="sm" className="w-full sm:w-auto touch-target">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
           </div>
         </CardContent>
       </Card>
