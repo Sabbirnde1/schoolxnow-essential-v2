@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { AdvancedFilter, FilterField, FilterValue } from "@/components/AdvancedFilter";
 import { useAdvancedFilter } from "@/hooks/useAdvancedFilter";
+import { DataGridSkeleton } from "@/components/ui/skeleton-loader";
 import { 
   Plus, 
   Download, 
@@ -398,11 +399,7 @@ export function StudentManagement() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <DataGridSkeleton />;
   }
 
   return (
