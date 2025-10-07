@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -7,12 +7,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { FeedbackSurvey } from "@/components/FeedbackSurvey";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Button } from "@/components/ui/button";
 import logo from "@/assets/logo.png";
-import { Menu, MessageSquare } from "lucide-react";
+import { Menu } from "lucide-react";
 
 interface LayoutProps {
   children: ReactNode;
@@ -21,8 +18,6 @@ interface LayoutProps {
 }
 
 export function Layout({ children, activeModule, setActiveModule }: LayoutProps) {
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-
   return (
     <SidebarProvider defaultOpen={false}>
       <div className="flex min-h-screen w-full">
@@ -45,28 +40,11 @@ export function Layout({ children, activeModule, setActiveModule }: LayoutProps)
             </div>
             <div className="ml-auto flex items-center gap-2">
               <ThemeToggle />
-              <NotificationCenter />
             </div>
           </header>
           <main className="flex flex-1 flex-col gap-3 md:gap-4 p-3 md:p-4 lg:p-6 bg-background min-h-[calc(100vh-3.5rem)] md:min-h-[calc(100vh-4rem)] overflow-x-hidden">
             {children}
           </main>
-
-          {/* Floating Feedback Button */}
-          <Button
-            onClick={() => setFeedbackOpen(true)}
-            className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 z-50"
-            size="icon"
-            title="Share Feedback"
-          >
-            <MessageSquare className="h-6 w-6" />
-          </Button>
-
-          {/* Feedback Survey Dialog */}
-          <FeedbackSurvey
-            open={feedbackOpen}
-            onClose={() => setFeedbackOpen(false)}
-          />
         </SidebarInset>
       </div>
     </SidebarProvider>
