@@ -1,25 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   server: {
+    host: "::",
     port: 8080,
-    host: true,
-    strictPort: false, // Allow fallback to next available port
-    hmr: {
-      overlay: true,
-      port: 24678, // Dedicated HMR port
-    },
-    watch: {
-      usePolling: true, // Better Windows compatibility
-    },
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    mode === 'development' && componentTagger(),
+  ].filter(Boolean),
   resolve: {
     alias: {
-      "@": path.resolve(process.cwd(), "./src"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
-});
+}));
