@@ -1,7 +1,23 @@
 import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import App from './App.tsx';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { queryClient } from './lib/query-client';
 import './index.css';
+
+// Register service worker for offline capability
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then((registration) => {
+        console.log('✅ Service Worker registered:', registration.scope);
+      })
+      .catch((error) => {
+        console.error('❌ Service Worker registration failed:', error);
+      });
+  });
+}
 
 // Add better error handling for root element
 const rootElement = document.getElementById("root");
@@ -31,17 +47,21 @@ if (!rootElement) {
   
   // Use the fallback element
   createRoot(fallbackRoot).render(
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 } else {
   // Normal initialization
   console.log("✅ Found root element, mounting React app...");
   createRoot(rootElement).render(
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 
